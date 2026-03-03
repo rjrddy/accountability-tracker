@@ -6,10 +6,22 @@ import ContributionGrid from "@/components/analytics/ContributionGrid";
 import ProgressCards from "@/components/analytics/ProgressCards";
 import TrendsChart from "@/components/analytics/TrendsChart";
 import AuthButtons from "@/components/auth/AuthButtons";
+import UsernameModal from "@/components/auth/UsernameModal";
+import FriendsPage from "@/components/friends/FriendsPage";
 import GoalList from "@/components/GoalList";
 import Header from "@/components/layout/Header";
 import MobileTabs, { type MobileTab } from "@/components/layout/MobileTabs";
 import { useAuth } from "@/context/AuthContext";
+import {
+  createGoal as createGoalApi,
+  fetchAllGoals,
+  fetchMe,
+  goalsArrayToByDate,
+  type MeProfile,
+  patchGoal,
+  removeGoal,
+  updateUsername
+} from "@/lib/client/api";
 import {
   addGoal,
   clearCompleted,
@@ -23,6 +35,8 @@ import {
   updateGoalText,
   type GoalsByDate
 } from "@/lib/goalsStore";
+import { createMockSocialAdapter } from "@/lib/social/mockSocialAdapter";
+import { validateUsername } from "@/lib/validation/username";
 
 function getDateKey(date: Date): string {
   const offsetMs = date.getTimezoneOffset() * 60 * 1000;
@@ -33,21 +47,15 @@ function getTodayDateKey(): string {
   return getDateKey(new Date());
 }
 
-function hasAnyGoals(goalsByDate: GoalsByDate): boolean {
-  return Object.values(goalsByDate).some((goals) => goals.length > 0);
+function shiftDateKey(dateKey: string, deltaDays: number): string {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + deltaDays);
+  return getDateKey(date);
 }
 
-function mergeGoalsByDate(existing: GoalsByDate, incoming: GoalsByDate): GoalsByDate {
-  const merged: GoalsByDate = { ...existing };
-
-  for (const [date, incomingGoals] of Object.entries(incoming)) {
-    const current = merged[date] ?? [];
-    const seen = new Set(current.map((goal) => goal.id));
-    const dedupedIncoming = incomingGoals.filter((goal) => !seen.has(goal.id));
-    merged[date] = [...current, ...dedupedIncoming];
-  }
-
-  return merged;
+function hasAnyGoals(goalsByDate: GoalsByDate): boolean {
+  return Object.values(goalsByDate).some((goals) => goals.length > 0);
 }
 
 function ChecklistPanel({
@@ -80,8 +88,16 @@ function ChecklistPanel({
 
       <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <label htmlFor="goal-date" className="flex h-10 min-w-[220px] flex-1 items-center gap-2">
+          <label htmlFor="goal-date" className="flex min-w-[240px] flex-1 items-center gap-2">
             <span className="text-sm font-medium text-slate-700">Date</span>
+            <button
+              type="button"
+              onClick={() => onDateChange(shiftDateKey(selectedDate, -1))}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+              aria-label="Previous day"
+            >
+              ←
+            </button>
             <input
               id="goal-date"
               type="date"
@@ -90,6 +106,14 @@ function ChecklistPanel({
               onChange={(event) => onDateChange(event.target.value)}
               aria-label="Select date"
             />
+            <button
+              type="button"
+              onClick={() => onDateChange(shiftDateKey(selectedDate, 1))}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-slate-300 bg-white text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+              aria-label="Next day"
+            >
+              →
+            </button>
           </label>
 
           <p
@@ -147,6 +171,12 @@ function SettingsPanel({
   loading,
   isConfigured,
   userLabel,
+  username,
+  usernameInput,
+  usernameError,
+  usernameSaving,
+  onUsernameChange,
+  onSaveUsername,
   onSignIn,
   onSignOut,
   canImportGuestData,
@@ -156,6 +186,12 @@ function SettingsPanel({
   loading: boolean;
   isConfigured: boolean;
   userLabel: string | null;
+  username: string | null;
+  usernameInput: string;
+  usernameError: string | null;
+  usernameSaving: boolean;
+  onUsernameChange: (value: string) => void;
+  onSaveUsername: () => void;
   onSignIn: () => Promise<void>;
   onSignOut: () => Promise<void>;
   canImportGuestData: boolean;
@@ -186,6 +222,31 @@ function SettingsPanel({
           </button>
         ) : null}
 
+        {userLabel ? (
+          <div className="w-full rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <p className="text-xs text-slate-500">Username</p>
+            <p className="mt-1 text-sm font-medium text-slate-800">{username ? `@${username}` : "Not set"}</p>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <input
+                type="text"
+                value={usernameInput}
+                onChange={(event) => onUsernameChange(event.target.value)}
+                className="h-10 min-w-[220px] flex-1 rounded-md border border-slate-300 bg-white px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+                placeholder="Set username"
+              />
+              <button
+                type="button"
+                disabled={usernameSaving}
+                onClick={onSaveUsername}
+                className="inline-flex h-10 items-center rounded-md bg-slate-900 px-3 text-sm font-medium text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {usernameSaving ? "Saving..." : "Save username"}
+              </button>
+            </div>
+            {usernameError ? <p className="mt-1 text-xs text-red-600">{usernameError}</p> : null}
+          </div>
+        ) : null}
+
         {statusMessage ? <p className="text-xs text-slate-500">{statusMessage}</p> : null}
       </div>
     </section>
@@ -199,8 +260,24 @@ export default function HomePage() {
   const [isHydrated, setIsHydrated] = useState(false);
   const [activeTab, setActiveTab] = useState<MobileTab>("today");
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const storageKey = useMemo(() => getStorageKey(user?.uid), [user?.uid]);
+  const [usernameInput, setUsernameInput] = useState("");
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+  const [usernameSaving, setUsernameSaving] = useState(false);
+  const [requireUsername, setRequireUsername] = useState(false);
+  const [serverUsername, setServerUsername] = useState<string | null>(null);
+  const [meProfile, setMeProfile] = useState<MeProfile | null>(null);
+  const storageKey = useMemo(() => getStorageKey(null), []);
   const guestStorageKey = useMemo(() => getStorageKey(null), []);
+  const socialAdapter = useMemo(
+    () =>
+      createMockSocialAdapter({
+        uid: meProfile?.uid ?? "guest",
+        username: meProfile?.username ?? "guest",
+        displayName: meProfile?.displayName ?? "Guest",
+        photoURL: meProfile?.photoURL ?? undefined
+      }),
+    [meProfile?.displayName, meProfile?.photoURL, meProfile?.uid, meProfile?.username]
+  );
 
   const todayLabel = useMemo(
     () =>
@@ -214,10 +291,57 @@ export default function HomePage() {
   );
 
   useEffect(() => {
-    const loaded = loadGoalsByDate(storageKey);
-    setGoalsByDate(loaded);
-    setIsHydrated(true);
-  }, [storageKey]);
+    let cancelled = false;
+
+    const run = async () => {
+      setIsHydrated(false);
+      setStatusMessage(null);
+
+      if (!user) {
+        const loaded = loadGoalsByDate(storageKey);
+        if (!cancelled) {
+          setGoalsByDate(loaded);
+          setRequireUsername(false);
+          setServerUsername(null);
+          setUsernameInput("");
+          setMeProfile({
+            uid: "guest",
+            username: "guest",
+            displayName: "Guest",
+            photoURL: null
+          });
+          setIsHydrated(true);
+        }
+        return;
+      }
+
+      try {
+        const [profile, allGoals] = await Promise.all([fetchMe(user), fetchAllGoals(user)]);
+        if (cancelled) {
+          return;
+        }
+
+        setServerUsername(profile.username);
+        setUsernameInput(profile.username ?? "");
+        setMeProfile(profile);
+        setRequireUsername(!profile.username);
+        setGoalsByDate(goalsArrayToByDate(allGoals));
+      } catch (error: unknown) {
+        if (!cancelled) {
+          setStatusMessage((error as Error).message);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsHydrated(true);
+        }
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [storageKey, user]);
 
   const canImportGuestData = useMemo(() => {
     if (!user) {
@@ -235,7 +359,7 @@ export default function HomePage() {
     [goalsByDate, selectedDate]
   );
 
-  const updateAndPersist = (updater: (current: GoalsByDate) => GoalsByDate) => {
+  const updateGuestState = (updater: (current: GoalsByDate) => GoalsByDate) => {
     setGoalsByDate((current) => {
       const next = updater(current);
       saveGoalsByDate(next, storageKey);
@@ -243,7 +367,35 @@ export default function HomePage() {
     });
   };
 
-  const handleImportGuestData = () => {
+  const handleSaveUsername = async () => {
+    if (!user) {
+      return;
+    }
+
+    const validationError = validateUsername(usernameInput);
+    if (validationError) {
+      setUsernameError(validationError);
+      return;
+    }
+
+    setUsernameSaving(true);
+    setUsernameError(null);
+
+    try {
+      const profile = await updateUsername(user, usernameInput);
+      setServerUsername(profile.username);
+      setUsernameInput(profile.username ?? "");
+      setMeProfile(profile);
+      setRequireUsername(false);
+      setStatusMessage("Username saved.");
+    } catch (error: unknown) {
+      setUsernameError((error as Error).message);
+    } finally {
+      setUsernameSaving(false);
+    }
+  };
+
+  const handleImportGuestData = async () => {
     if (!user) {
       return;
     }
@@ -254,10 +406,113 @@ export default function HomePage() {
       return;
     }
 
-    const merged = mergeGoalsByDate(goalsByDate, guestData);
-    setGoalsByDate(merged);
-    saveGoalsByDate(merged, storageKey);
-    setStatusMessage("Imported guest data. Guest data is still preserved locally.");
+    try {
+      for (const [date, goals] of Object.entries(guestData)) {
+        for (const goal of goals) {
+          const created = await createGoalApi(user, date, goal.text);
+          if (goal.completed) {
+            await patchGoal(user, created.id, { completed: true });
+          }
+        }
+      }
+
+      const allGoals = await fetchAllGoals(user);
+      setGoalsByDate(goalsArrayToByDate(allGoals));
+      setStatusMessage("Imported guest data. Guest data is still preserved locally.");
+    } catch (error: unknown) {
+      setStatusMessage((error as Error).message);
+    }
+  };
+
+  const handleAddGoal = async (text: string) => {
+    if (!user) {
+      updateGuestState((current) => addGoal(current, selectedDate, { text }));
+      return;
+    }
+
+    try {
+      const created = await createGoalApi(user, selectedDate, text);
+      setGoalsByDate((current) => {
+        const existing = current[selectedDate] ?? [];
+        return { ...current, [selectedDate]: [...existing, created] };
+      });
+    } catch (error: unknown) {
+      setStatusMessage((error as Error).message);
+    }
+  };
+
+  const handleToggleGoal = async (goalId: string) => {
+    const existing = goalsForDate.find((goal) => goal.id === goalId);
+    if (!existing) {
+      return;
+    }
+
+    if (!user) {
+      updateGuestState((current) => toggleGoalCompleted(current, selectedDate, goalId));
+      return;
+    }
+
+    try {
+      const updated = await patchGoal(user, goalId, { completed: !existing.completed });
+      setGoalsByDate((current) => ({
+        ...current,
+        [selectedDate]: (current[selectedDate] ?? []).map((goal) => (goal.id === goalId ? updated : goal))
+      }));
+    } catch (error: unknown) {
+      setStatusMessage((error as Error).message);
+    }
+  };
+
+  const handleDeleteGoal = async (goalId: string) => {
+    if (!user) {
+      updateGuestState((current) => deleteGoal(current, selectedDate, goalId));
+      return;
+    }
+
+    try {
+      await removeGoal(user, goalId);
+      setGoalsByDate((current) => ({
+        ...current,
+        [selectedDate]: (current[selectedDate] ?? []).filter((goal) => goal.id !== goalId)
+      }));
+    } catch (error: unknown) {
+      setStatusMessage((error as Error).message);
+    }
+  };
+
+  const handleUpdateGoalText = async (goalId: string, newText: string) => {
+    if (!user) {
+      updateGuestState((current) => updateGoalText(current, selectedDate, goalId, newText));
+      return;
+    }
+
+    try {
+      const updated = await patchGoal(user, goalId, { text: newText });
+      setGoalsByDate((current) => ({
+        ...current,
+        [selectedDate]: (current[selectedDate] ?? []).map((goal) => (goal.id === goalId ? updated : goal))
+      }));
+    } catch (error: unknown) {
+      setStatusMessage((error as Error).message);
+    }
+  };
+
+  const handleClearCompleted = async () => {
+    if (!user) {
+      updateGuestState((current) => clearCompleted(current, selectedDate));
+      return;
+    }
+
+    const completedGoals = goalsForDate.filter((goal) => goal.completed);
+    try {
+      await Promise.all(completedGoals.map((goal) => removeGoal(user, goal.id)));
+      setGoalsByDate((current) => ({
+        ...current,
+        [selectedDate]: (current[selectedDate] ?? []).filter((goal) => !goal.completed)
+      }));
+    } catch (error: unknown) {
+      setStatusMessage((error as Error).message);
+    }
   };
 
   return (
@@ -277,7 +532,9 @@ export default function HomePage() {
               {canImportGuestData ? (
                 <button
                   type="button"
-                  onClick={handleImportGuestData}
+                  onClick={() => {
+                    void handleImportGuestData();
+                  }}
                   className="inline-flex h-9 items-center rounded-md border border-sky-300 bg-sky-50 px-3 text-xs font-medium text-sky-800 transition hover:bg-sky-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
                 >
                   Import guest data
@@ -289,74 +546,88 @@ export default function HomePage() {
 
         <MobileTabs activeTab={activeTab} onChange={setActiveTab} />
 
-        <div className="space-y-4 sm:hidden">
-          {activeTab === "today" ? (
-            <ChecklistPanel
-              selectedDate={selectedDate}
-              onDateChange={setSelectedDate}
-              goalsForDate={goalsForDate}
-              isHydrated={isHydrated}
-              onAddGoal={(text) => updateAndPersist((current) => addGoal(current, selectedDate, { text }))}
-              onToggle={(goalId) =>
-                updateAndPersist((current) => toggleGoalCompleted(current, selectedDate, goalId))
-              }
-              onDelete={(goalId) => updateAndPersist((current) => deleteGoal(current, selectedDate, goalId))}
-              onUpdateText={(goalId, newText) =>
-                updateAndPersist((current) => updateGoalText(current, selectedDate, goalId, newText))
-              }
-              onClearCompleted={() =>
-                updateAndPersist((current) => clearCompleted(current, selectedDate))
-              }
-            />
-          ) : null}
-
-          {activeTab === "progress" ? (
-            <ProgressPanel
-              goalsByDate={goalsByDate}
-              selectedDate={selectedDate}
-              onSelectDate={(nextDate) => {
-                setSelectedDate(nextDate);
-                setActiveTab("today");
-              }}
-            />
-          ) : null}
-
-          {activeTab === "settings" ? (
-            <SettingsPanel
-              loading={loading}
-              isConfigured={isConfigured}
-              userLabel={userLabel}
-              onSignIn={signIn}
-              onSignOut={signOut}
-              canImportGuestData={canImportGuestData}
-              onImportGuestData={handleImportGuestData}
-              statusMessage={statusMessage}
-            />
-          ) : null}
-        </div>
-
-        <div className="hidden sm:grid sm:gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        {activeTab === "today" ? (
           <ChecklistPanel
             selectedDate={selectedDate}
             onDateChange={setSelectedDate}
             goalsForDate={goalsForDate}
             isHydrated={isHydrated}
-            onAddGoal={(text) => updateAndPersist((current) => addGoal(current, selectedDate, { text }))}
-            onToggle={(goalId) =>
-              updateAndPersist((current) => toggleGoalCompleted(current, selectedDate, goalId))
-            }
-            onDelete={(goalId) => updateAndPersist((current) => deleteGoal(current, selectedDate, goalId))}
-            onUpdateText={(goalId, newText) =>
-              updateAndPersist((current) => updateGoalText(current, selectedDate, goalId, newText))
-            }
-            onClearCompleted={() => updateAndPersist((current) => clearCompleted(current, selectedDate))}
+            onAddGoal={(text) => {
+              void handleAddGoal(text);
+            }}
+            onToggle={(goalId) => {
+              void handleToggleGoal(goalId);
+            }}
+            onDelete={(goalId) => {
+              void handleDeleteGoal(goalId);
+            }}
+            onUpdateText={(goalId, newText) => {
+              void handleUpdateGoalText(goalId, newText);
+            }}
+            onClearCompleted={() => {
+              void handleClearCompleted();
+            }}
           />
+        ) : null}
 
-          <aside>
-            <ProgressPanel goalsByDate={goalsByDate} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
-          </aside>
-        </div>
+        {activeTab === "progress" ? (
+          <ProgressPanel goalsByDate={goalsByDate} selectedDate={selectedDate} onSelectDate={setSelectedDate} />
+        ) : null}
+
+        {activeTab === "friends" ? (
+          <FriendsPage
+            adapter={socialAdapter}
+            currentProfile={{
+              uid: meProfile?.uid ?? "guest",
+              username: meProfile?.username ?? "guest",
+              displayName: meProfile?.displayName ?? "Guest",
+              photoURL: meProfile?.photoURL ?? undefined
+            }}
+            myGoalsByDate={goalsByDate}
+          />
+        ) : null}
+
+        {activeTab === "settings" ? (
+          <SettingsPanel
+            loading={loading}
+            isConfigured={isConfigured}
+            userLabel={userLabel}
+            onSignIn={signIn}
+            onSignOut={signOut}
+            canImportGuestData={canImportGuestData}
+            onImportGuestData={() => {
+              void handleImportGuestData();
+            }}
+            statusMessage={statusMessage}
+            username={serverUsername}
+            usernameInput={usernameInput}
+            usernameError={usernameError}
+            usernameSaving={usernameSaving}
+            onUsernameChange={(value) => {
+              setUsernameInput(value);
+              setUsernameError(null);
+            }}
+            onSaveUsername={() => {
+              void handleSaveUsername();
+            }}
+          />
+        ) : null}
       </div>
+
+      {user && requireUsername ? (
+        <UsernameModal
+          value={usernameInput}
+          error={usernameError}
+          loading={usernameSaving}
+          onChange={(value) => {
+            setUsernameInput(value);
+            setUsernameError(null);
+          }}
+          onSubmit={() => {
+            void handleSaveUsername();
+          }}
+        />
+      ) : null}
     </main>
   );
 }
