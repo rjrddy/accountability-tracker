@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "postinstall": "prisma generate",
+    "postinstall": "bash -lc 'set -a; [ -f .env.local ] && source .env.local; : ${PRISMA_DATABASE_URL:=$POSTGRES_URL}; export PRISMA_DATABASE_URL; set +a; prisma generate'",
     "dev": "next dev",
-    "build": "prisma migrate deploy && next build",
+    "build": "bash -lc 'set -a; [ -f .env.local ] && source .env.local; : ${PRISMA_DATABASE_URL:=$POSTGRES_URL}; export PRISMA_DATABASE_URL; set +a; if [ -n \"$PRISMA_DATABASE_URL\" ]; then prisma migrate deploy; else echo \"Skipping prisma migrate deploy: PRISMA_DATABASE_URL not set\"; fi; next build'",
     "start": "next start",
     "lint": "next lint",
     "test": "vitest run"

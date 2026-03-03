@@ -67,19 +67,46 @@ NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=...
 
 ## Postgres + Prisma setup
 
-1. Provision a Postgres database.
-2. Add `DATABASE_URL` to `.env.local`:
+1. Provision a Postgres database (or Vercel Postgres).
+2. Add `PRISMA_DATABASE_URL` to `.env.local`:
 
 ```bash
-DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DBNAME?schema=public"
+PRISMA_DATABASE_URL="postgresql://USER:PASSWORD@HOST:5432/DBNAME?schema=public"
+# Optional from Vercel integration:
+POSTGRES_URL="postgresql://USER:PASSWORD@HOST:5432/DBNAME?sslmode=require"
 ```
 
 3. Run Prisma migration + client generation:
 
 ```bash
-npx prisma migrate dev
+npx prisma migrate dev --name init
 npx prisma generate
 ```
+
+Note: Prisma CLI reads `.env` by default. This project’s npm scripts load `.env.local` and map
+`POSTGRES_URL` to `PRISMA_DATABASE_URL` when needed, so `npm run build` works with Vercel-pulled envs.
+
+For production deploys (including Vercel), migrations run via build script:
+
+```bash
+npm run build
+```
+This runs `prisma migrate deploy && next build`.
+
+## Deploy to Vercel
+
+1. Create a Vercel project and attach a Vercel Postgres database.
+2. Ensure Vercel environment variables include:
+   - `PRISMA_DATABASE_URL` (used by Prisma datasource)
+   - Firebase client env vars (`NEXT_PUBLIC_FIREBASE_*`)
+   - Firebase admin env vars (`FIREBASE_ADMIN_*`) or `GOOGLE_APPLICATION_CREDENTIALS`
+3. Pull env vars locally for parity:
+
+```bash
+vercel env pull .env.local
+```
+
+4. Deploy. Build runs migrations safely using `prisma migrate deploy`.
 
 ## Firebase Admin setup (API auth)
 
@@ -104,13 +131,25 @@ Without valid Firebase Admin credentials, authenticated API routes will return `
 npm install
 ```
 
-2. Start dev server:
+2. Generate Prisma client:
+
+```bash
+npx prisma generate
+```
+
+3. Create/apply local migration during iteration (if schema changed):
+
+```bash
+npx prisma migrate dev --name init
+```
+
+4. Start dev server:
 
 ```bash
 npm run dev
 ```
 
-3. Open `http://localhost:3000`
+5. Open `http://localhost:3000`
 
 ## Test
 
