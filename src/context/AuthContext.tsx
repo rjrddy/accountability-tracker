@@ -9,12 +9,13 @@ import {
   signOut as firebaseSignOut
 } from "firebase/auth";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { auth, googleProvider } from "@/lib/firebaseClient";
+import { auth, firebaseInitError, googleProvider } from "@/lib/firebaseClient";
 
 type AuthContextValue = {
   user: User | null;
   loading: boolean;
   isConfigured: boolean;
+  initError: string | null;
   signIn: () => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -57,6 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       user,
       loading,
       isConfigured,
+      initError: firebaseInitError,
       async signIn() {
         if (!auth || !googleProvider) {
           return;

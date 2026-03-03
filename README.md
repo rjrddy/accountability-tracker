@@ -2,6 +2,11 @@
 
 A minimal daily goals tracker built with Next.js (App Router), React, and TypeScript.
 
+## Environment model
+
+This repository is maintained and run in one production environment on this machine.
+No multi-developer clone workflow is assumed.
+
 ## Features
 
 - Pick a date (defaults to today)
@@ -65,6 +70,20 @@ NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
 NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=...
 ```
 
+## Vercel env vars required for Firebase
+
+Set these in Vercel Project Settings -> Environment Variables (at minimum for **Production**):
+
+- `NEXT_PUBLIC_FIREBASE_API_KEY`
+- `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`
+- `NEXT_PUBLIC_FIREBASE_PROJECT_ID`
+- `NEXT_PUBLIC_FIREBASE_APP_ID`
+- `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET`
+- `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
+- `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` (optional)
+
+Important: after adding or changing Firebase env vars in Vercel, you must redeploy for changes to take effect.
+
 ## Postgres + Prisma setup
 
 1. Provision a Postgres database (or Vercel Postgres).
@@ -93,20 +112,15 @@ npm run build
 ```
 This runs `prisma migrate deploy && next build`.
 
-## Deploy to Vercel
+## Production deploy (Vercel)
 
-1. Create a Vercel project and attach a Vercel Postgres database.
-2. Ensure Vercel environment variables include:
-   - `PRISMA_DATABASE_URL` (used by Prisma datasource)
-   - Firebase client env vars (`NEXT_PUBLIC_FIREBASE_*`)
-   - Firebase admin env vars (`FIREBASE_ADMIN_*`) or `GOOGLE_APPLICATION_CREDENTIALS`
-3. Pull env vars locally for parity:
-
-```bash
-vercel env pull .env.local
-```
-
-4. Deploy. Build runs migrations safely using `prisma migrate deploy`.
+1. Attach Vercel Postgres to the project.
+2. Set required Vercel env vars (Production):
+   - `PRISMA_DATABASE_URL`
+   - `NEXT_PUBLIC_FIREBASE_*`
+   - `FIREBASE_ADMIN_*` (or `GOOGLE_APPLICATION_CREDENTIALS`)
+3. Redeploy after any env change.
+4. Build runs migrations via `prisma migrate deploy` automatically.
 
 ## Firebase Admin setup (API auth)
 
@@ -123,7 +137,7 @@ FIREBASE_ADMIN_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE K
 
 Without valid Firebase Admin credentials, authenticated API routes will return `401`.
 
-## Run locally
+## Run (production machine)
 
 1. Install dependencies:
 
@@ -137,13 +151,13 @@ npm install
 npx prisma generate
 ```
 
-3. Create/apply local migration during iteration (if schema changed):
+3. Create/apply migration when schema changes:
 
 ```bash
 npx prisma migrate dev --name init
 ```
 
-4. Start dev server:
+4. Start server in dev mode when needed:
 
 ```bash
 npm run dev

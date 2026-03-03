@@ -4,6 +4,7 @@ type AuthButtonsProps = {
   userLabel: string | null;
   loading: boolean;
   isConfigured: boolean;
+  initError?: string | null;
   onSignIn: () => Promise<void>;
   onSignOut: () => Promise<void>;
 };
@@ -12,11 +13,16 @@ export default function AuthButtons({
   userLabel,
   loading,
   isConfigured,
+  initError,
   onSignIn,
   onSignOut
 }: AuthButtonsProps) {
   if (!isConfigured) {
-    return <p className="text-xs text-slate-500">Firebase auth is not configured.</p>;
+    return (
+      <p className="rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800">
+        {initError ?? "Firebase authentication is unavailable. Check environment configuration."}
+      </p>
+    );
   }
 
   if (loading) {

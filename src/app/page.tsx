@@ -170,6 +170,7 @@ function ProgressPanel({
 function SettingsPanel({
   loading,
   isConfigured,
+  initError,
   userLabel,
   username,
   usernameInput,
@@ -185,6 +186,7 @@ function SettingsPanel({
 }: {
   loading: boolean;
   isConfigured: boolean;
+  initError: string | null;
   userLabel: string | null;
   username: string | null;
   usernameInput: string;
@@ -208,6 +210,7 @@ function SettingsPanel({
           userLabel={userLabel}
           loading={loading}
           isConfigured={isConfigured}
+          initError={initError}
           onSignIn={onSignIn}
           onSignOut={onSignOut}
         />
@@ -254,7 +257,7 @@ function SettingsPanel({
 }
 
 export default function HomePage() {
-  const { user, loading, isConfigured, signIn, signOut } = useAuth();
+  const { user, loading, isConfigured, initError, signIn, signOut } = useAuth();
   const [selectedDate, setSelectedDate] = useState<string>(getTodayDateKey());
   const [goalsByDate, setGoalsByDate] = useState<GoalsByDate>({});
   const [isHydrated, setIsHydrated] = useState(false);
@@ -526,6 +529,7 @@ export default function HomePage() {
                 userLabel={userLabel}
                 loading={loading}
                 isConfigured={isConfigured}
+                initError={initError}
                 onSignIn={signIn}
                 onSignOut={signOut}
               />
@@ -591,6 +595,7 @@ export default function HomePage() {
           <SettingsPanel
             loading={loading}
             isConfigured={isConfigured}
+            initError={initError}
             userLabel={userLabel}
             onSignIn={signIn}
             onSignOut={signOut}
