@@ -31,3 +31,5 @@ pnpm-debug.log*
 coverage
 
 .env
+
+accountability-tracker-bd608-firebase-adminsdk-fbsvc-ca84fd4031.json
