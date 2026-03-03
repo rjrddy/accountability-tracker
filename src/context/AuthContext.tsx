@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  GoogleAuthProvider,
   User,
   getRedirectResult,
   onAuthStateChanged,
@@ -10,7 +9,7 @@ import {
   signOut as firebaseSignOut
 } from "firebase/auth";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { getFirebaseAuth } from "@/lib/firebaseClient";
+import { auth, googleProvider } from "@/lib/firebaseClient";
 
 type AuthContextValue = {
   user: User | null;
@@ -33,17 +32,13 @@ function isMobileDevice(): boolean {
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const auth = getFirebaseAuth();
-  const isConfigured = Boolean(auth);
+  const isConfigured = Boolean(auth && googleProvider);
 
   useEffect(() => {
     if (!auth) {
       setLoading(false);
       return;
     }
-
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: "select_account" });
 
     getRedirectResult(auth).catch((error: unknown) => {
       console.error("Failed to complete auth redirect", error);
@@ -55,7 +50,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, [auth]);
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -63,19 +58,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       loading,
       isConfigured,
       async signIn() {
-        if (!auth) {
+        if (!auth || !googleProvider) {
           return;
         }
-
-        const provider = new GoogleAuthProvider();
-        provider.setCustomParameters({ prompt: "select_account" });
+        googleProvider.setCustomParameters({ prompt: "select_account" });
 
         if (isMobileDevice()) {
-          await signInWithRedirect(auth, provider);
+          await signInWithRedirect(auth, googleProvider);
           return;
         }
 
-        await signInWithPopup(auth, provider);
+        await signInWithPopup(auth, googleProvider);
       },
       async signOut() {
         if (!auth) {
@@ -84,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await firebaseSignOut(auth);
       }
     }),
-    [auth, isConfigured, loading, user]
+    [isConfigured, loading, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

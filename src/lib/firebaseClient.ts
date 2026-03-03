@@ -1,8 +1,7 @@
 "use client";
 
 import { FirebaseApp, getApp, getApps, initializeApp } from "firebase/app";
-import { Auth, getAuth } from "firebase/auth";
-import admin from "firebase-admin";
+import { Auth, GoogleAuthProvider, getAuth } from "firebase/auth";
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -13,22 +12,7 @@ const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
 };
 
-if (!admin.apps.length) {
-  admin.initializeApp({
-    credential: admin.credential.cert({
-      projectId: process.env.FIREBASE_PROJECT_ID,
-      clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n"),
-    }),
-  });
-}
-
-export const adminAuth = admin.auth();
-
-let cachedApp: FirebaseApp | null = null;
-let cachedAuth: Auth | null = null;
-
-function isFirebaseConfigured(): boolean {
+function isConfigured(): boolean {
   return Boolean(
     firebaseConfig.apiKey &&
       firebaseConfig.authDomain &&
@@ -37,33 +21,14 @@ function isFirebaseConfigured(): boolean {
   );
 }
 
-export function getFirebaseApp(): FirebaseApp | null {
-  if (typeof window === "undefined" || !isFirebaseConfigured()) {
-    return null;
-  }
+export const firebaseApp: FirebaseApp | null =
+  typeof window !== "undefined" && isConfigured()
+    ? getApps().length > 0
+      ? getApp()
+      : initializeApp(firebaseConfig)
+    : null;
 
-  if (cachedApp) {
-    return cachedApp;
-  }
-
-  cachedApp = getApps().length > 0 ? getApp() : initializeApp(firebaseConfig);
-  return cachedApp;
-}
-
-export function getFirebaseAuth(): Auth | null {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  if (cachedAuth) {
-    return cachedAuth;
-  }
-
-  const app = getFirebaseApp();
-  if (!app) {
-    return null;
-  }
-
-  cachedAuth = getAuth(app);
-  return cachedAuth;
-}
+export const auth: Auth | null = firebaseApp ? getAuth(firebaseApp) : null;
+export const googleProvider: GoogleAuthProvider | null = firebaseApp
+  ? new GoogleAuthProvider()
+  : null;

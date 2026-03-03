@@ -1,9 +1,9 @@
 import type { NextRequest } from "next/server";
-import { getFirebaseAdminAuth } from "@/lib/server/firebaseAdmin";
+import { adminAuth } from "@/lib/server/firebaseAdmin";
 
 export async function requireUid(request: NextRequest): Promise<{
   uid: string;
-  decodedToken: Awaited<ReturnType<ReturnType<typeof getFirebaseAdminAuth>["verifyIdToken"]>>;
+  decodedToken: Awaited<ReturnType<typeof adminAuth.verifyIdToken>>;
 }> {
   const authHeader = request.headers.get("authorization");
   if (!authHeader || !authHeader.toLowerCase().startsWith("bearer ")) {
@@ -16,7 +16,7 @@ export async function requireUid(request: NextRequest): Promise<{
   }
 
   try {
-    const decodedToken = await getFirebaseAdminAuth().verifyIdToken(token);
+    const decodedToken = await adminAuth.verifyIdToken(token);
     return { uid: decodedToken.uid, decodedToken };
   } catch {
     throw new Error("Unauthorized");
