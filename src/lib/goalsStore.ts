@@ -7,6 +7,7 @@ export type Goal = {
   text: string;
   completed: boolean;
   createdAt: string;
+  completedAt?: number;
 };
 
 export type GoalsByDate = Record<string, Goal[]>;
@@ -44,14 +45,16 @@ function safeParseGoals(rawValue: string): GoalsByDate {
             typeof candidate.id === "string" &&
             typeof candidate.text === "string" &&
             typeof candidate.completed === "boolean" &&
-            typeof candidate.createdAt === "string"
+            typeof candidate.createdAt === "string" &&
+            (candidate.completedAt === undefined || typeof candidate.completedAt === "number")
           );
         })
         .map((goal) => ({
           id: goal.id,
           text: goal.text,
           completed: goal.completed,
-          createdAt: goal.createdAt
+          createdAt: goal.createdAt,
+          completedAt: goal.completedAt
         }));
 
       result[date] = cleanedGoals;
@@ -162,7 +165,8 @@ export function toggleGoalCompleted(goalsByDate: GoalsByDate, dateKey: string, g
 
     return {
       ...goal,
-      completed: !goal.completed
+      completed: !goal.completed,
+      completedAt: goal.completed ? undefined : Date.now()
     };
   });
 
@@ -198,4 +202,25 @@ export function getProgress(goals: Goal[]): { completed: number; total: number; 
   const percentage = total === 0 ? 0 : Math.round((completed / total) * 100);
 
   return { completed, total, percentage };
+}
+
+function parseTime(value: string): number {
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+export function sortGoalsForDisplay(goals: Goal[]): Goal[] {
+  const incomplete = goals
+    .filter((goal) => !goal.completed)
+    .sort((a, b) => parseTime(a.createdAt) - parseTime(b.createdAt));
+
+  const completed = goals
+    .filter((goal) => goal.completed)
+    .sort((a, b) => {
+      const aTime = a.completedAt ?? parseTime(a.createdAt);
+      const bTime = b.completedAt ?? parseTime(b.createdAt);
+      return aTime - bTime;
+    });
+
+  return [...incomplete, ...completed];
 }

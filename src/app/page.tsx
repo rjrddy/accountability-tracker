@@ -6,17 +6,16 @@ import ContributionGrid from "@/components/analytics/ContributionGrid";
 import ProgressCards from "@/components/analytics/ProgressCards";
 import TrendsChart from "@/components/analytics/TrendsChart";
 import AuthButtons from "@/components/auth/AuthButtons";
-import DatePicker from "@/components/DatePicker";
 import GoalList from "@/components/GoalList";
 import Header from "@/components/layout/Header";
 import MobileTabs, { type MobileTab } from "@/components/layout/MobileTabs";
-import ProgressSummary from "@/components/ProgressSummary";
 import { useAuth } from "@/context/AuthContext";
 import {
   addGoal,
   clearCompleted,
   deleteGoal,
   getGoalsForDate,
+  getProgress,
   getStorageKey,
   loadGoalsByDate,
   saveGoalsByDate,
@@ -72,27 +71,46 @@ function ChecklistPanel({
   onUpdateText: (goalId: string, nextText: string) => void;
   onClearCompleted: () => void;
 }) {
+  const { completed, total, percentage } = getProgress(goalsForDate);
+
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:p-7">
       <h2 className="text-xl font-semibold tracking-tight text-slate-900">Daily Goals</h2>
       <p className="mt-2 text-sm text-slate-600">Track what matters for each day.</p>
 
-      <div className="mt-5 grid gap-4 sm:gap-5">
-        <DatePicker value={selectedDate} onChange={onDateChange} />
+      <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-3 sm:p-4">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <label htmlFor="goal-date" className="flex h-10 min-w-[220px] flex-1 items-center gap-2">
+            <span className="text-sm font-medium text-slate-700">Date</span>
+            <input
+              id="goal-date"
+              type="date"
+              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-900 shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:ring-offset-2"
+              value={selectedDate}
+              onChange={(event) => onDateChange(event.target.value)}
+              aria-label="Select date"
+            />
+          </label>
 
-        <AddGoalForm onAddGoal={onAddGoal} />
+          <p
+            className="inline-flex h-10 items-center rounded-md border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700"
+            aria-live="polite"
+          >
+            {completed}/{total} • {percentage}%
+          </p>
 
-        <ProgressSummary goals={goalsForDate} />
-
-        <div className="flex items-center gap-2">
           <button
             type="button"
-            className="inline-flex h-10 items-center rounded-md border border-slate-300 bg-white px-4 text-sm font-medium text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-10 items-center rounded-md border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 sm:ml-auto"
             onClick={onClearCompleted}
             disabled={!goalsForDate.some((goal) => goal.completed)}
           >
             Clear completed
           </button>
+        </div>
+
+        <div className="mt-3">
+          <AddGoalForm onAddGoal={onAddGoal} />
         </div>
       </div>
 
@@ -244,7 +262,7 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-slate-100 px-4 py-6 sm:px-6 sm:py-10">
-      <div className="mx-auto w-full max-w-6xl">
+      <div className="mx-auto w-full max-w-5xl">
         <Header
           todayLabel={todayLabel}
           rightSlot={

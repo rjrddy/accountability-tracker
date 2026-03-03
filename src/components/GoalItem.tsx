@@ -70,11 +70,11 @@ export default function GoalItem({ goal, onToggle, onDelete, onUpdateText }: Goa
         )}
       </div>
 
-      <div className="ml-2 flex items-center gap-1 self-center">
+      <div className="ml-auto flex items-center gap-1 self-center">
         {!isEditing ? (
           <button
             type="button"
-            className="inline-flex h-8 items-center rounded-md px-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1"
+            className="inline-flex min-h-8 items-center rounded-md px-2 text-xs font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-1"
             onClick={() => setIsEditing(true)}
           >
             Edit
@@ -94,10 +94,10 @@ export default function GoalItem({ goal, onToggle, onDelete, onUpdateText }: Goa
 
         <button
           type="button"
-          className="inline-flex h-8 items-center rounded-md bg-red-50 px-2 text-xs font-medium text-red-700 transition hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1"
+          className="inline-flex min-h-8 items-center rounded-md px-2 text-xs font-medium text-red-600 transition hover:bg-red-50 hover:text-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:ring-offset-1"
           onClick={() => onDelete(goal.id)}
         >
-          Delete
+          Del
         </button>
       </div>
     </li>
