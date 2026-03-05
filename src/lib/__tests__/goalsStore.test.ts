@@ -3,6 +3,7 @@ import {
   STORAGE_KEY,
   addGoal,
   clearCompleted,
+  createGuestGoalForDate,
   deleteGoal,
   getGoalsForDate,
   getProgress,
@@ -155,6 +156,15 @@ describe("goalsStore", () => {
 
     expect(loaded).toEqual(state);
     expect(storage.getItem(STORAGE_KEY)).not.toBeNull();
+  });
+
+  it("creates and persists a guest goal in one call", () => {
+    const key = "goals:guest";
+    const next = createGuestGoalForDate(key, "2026-03-03", { text: "Hydrate" });
+    expect(next["2026-03-03"]).toHaveLength(1);
+
+    const reloaded = loadGoalsByDate(key);
+    expect(reloaded["2026-03-03"]?.[0]?.text).toBe("Hydrate");
   });
 
   it("returns progress summary", () => {

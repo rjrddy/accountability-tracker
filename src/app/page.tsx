@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import AddGoalForm from "@/components/AddGoalForm";
+import AddGoalForm, { type AddGoalInput } from "@/components/AddGoalForm";
 import ContributionGrid from "@/components/analytics/ContributionGrid";
 import ProgressCards from "@/components/analytics/ProgressCards";
 import TrendsChart from "@/components/analytics/TrendsChart";
@@ -13,18 +13,23 @@ import Header from "@/components/layout/Header";
 import MobileTabs, { type MobileTab } from "@/components/layout/MobileTabs";
 import { useAuth } from "@/context/AuthContext";
 import {
+  createSeries,
   createGoal as createGoalApi,
-  fetchAllGoals,
+  deleteSeries,
+  fetchGoalsForDate,
+  fetchGoalsRange,
   fetchMe,
   goalsArrayToByDate,
+  mutateSeriesOccurrence,
   type MeProfile,
   patchGoal,
   removeGoal,
+  updateSeries,
   updateUsername
 } from "@/lib/client/api";
 import {
-  addGoal,
   clearCompleted,
+  createGuestGoalForDate,
   deleteGoal,
   getGoalsForDate,
   getProgress,
@@ -33,6 +38,7 @@ import {
   saveGoalsByDate,
   toggleGoalCompleted,
   updateGoalText,
+  type Goal,
   type GoalsByDate
 } from "@/lib/goalsStore";
 import { createMockSocialAdapter } from "@/lib/social/mockSocialAdapter";
@@ -58,8 +64,27 @@ function hasAnyGoals(goalsByDate: GoalsByDate): boolean {
   return Object.values(goalsByDate).some((goals) => goals.length > 0);
 }
 
+function getAnalyticsStartDate(): string {
+  return shiftDateKey(getTodayDateKey(), -364);
+}
+
+function getWeekday(dateKey: string): number {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  return new Date(year, month - 1, day).getDay();
+}
+
+function toErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  return "Request failed.";
+}
+
 function ChecklistPanel({
   selectedDate,
+  mode,
+  authLoading,
   onDateChange,
   goalsForDate,
   isHydrated,
@@ -70,13 +95,15 @@ function ChecklistPanel({
   onClearCompleted
 }: {
   selectedDate: string;
+  mode: "guest" | "signed-in";
+  authLoading: boolean;
   onDateChange: (date: string) => void;
   goalsForDate: ReturnType<typeof getGoalsForDate>;
   isHydrated: boolean;
-  onAddGoal: (text: string) => void;
-  onToggle: (goalId: string) => void;
-  onDelete: (goalId: string) => void;
-  onUpdateText: (goalId: string, nextText: string) => void;
+  onAddGoal: (input: AddGoalInput) => Promise<void>;
+  onToggle: (goal: Goal) => void;
+  onDelete: (goal: Goal, scope?: "occurrence" | "series") => void;
+  onUpdateText: (goal: Goal, nextText: string, scope?: "occurrence" | "series") => void;
   onClearCompleted: () => void;
 }) {
   const { completed, total, percentage } = getProgress(goalsForDate);
@@ -134,7 +161,12 @@ function ChecklistPanel({
         </div>
 
         <div className="mt-3">
-          <AddGoalForm onAddGoal={onAddGoal} />
+          <AddGoalForm
+            selectedDate={selectedDate}
+            mode={mode}
+            authLoading={authLoading}
+            onAddGoal={onAddGoal}
+          />
         </div>
       </div>
 
@@ -319,7 +351,12 @@ export default function HomePage() {
       }
 
       try {
-        const [profile, allGoals] = await Promise.all([fetchMe(user), fetchAllGoals(user)]);
+        const rangeStart = getAnalyticsStartDate();
+        const today = getTodayDateKey();
+        const [profile, rangeGoals] = await Promise.all([
+          fetchMe(user),
+          fetchGoalsRange(user, rangeStart, today)
+        ]);
         if (cancelled) {
           return;
         }
@@ -328,7 +365,7 @@ export default function HomePage() {
         setUsernameInput(profile.username ?? "");
         setMeProfile(profile);
         setRequireUsername(!profile.username);
-        setGoalsByDate(goalsArrayToByDate(allGoals));
+        setGoalsByDate(goalsArrayToByDate(rangeGoals));
       } catch (error: unknown) {
         if (!cancelled) {
           setStatusMessage((error as Error).message);
@@ -345,6 +382,32 @@ export default function HomePage() {
       cancelled = true;
     };
   }, [storageKey, user]);
+
+  useEffect(() => {
+    if (!user || goalsByDate[selectedDate]) {
+      return;
+    }
+
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const dailyGoals = await fetchGoalsForDate(user, selectedDate);
+        if (cancelled) {
+          return;
+        }
+        setGoalsByDate((current) => ({ ...current, [selectedDate]: dailyGoals }));
+      } catch (error: unknown) {
+        if (!cancelled) {
+          setStatusMessage((error as Error).message);
+        }
+      }
+    };
+
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [goalsByDate, selectedDate, user]);
 
   const canImportGuestData = useMemo(() => {
     if (!user) {
@@ -368,6 +431,26 @@ export default function HomePage() {
       saveGoalsByDate(next, storageKey);
       return next;
     });
+  };
+
+  const refreshDate = async (date: string) => {
+    if (!user) {
+      return;
+    }
+
+    const dailyGoals = await fetchGoalsForDate(user, date);
+    setGoalsByDate((current) => ({ ...current, [date]: dailyGoals }));
+  };
+
+  const refreshAnalyticsRange = async () => {
+    if (!user) {
+      return;
+    }
+
+    const rangeStart = getAnalyticsStartDate();
+    const today = getTodayDateKey();
+    const rangeGoals = await fetchGoalsRange(user, rangeStart, today);
+    setGoalsByDate((current) => ({ ...current, ...goalsArrayToByDate(rangeGoals) }));
   };
 
   const handleSaveUsername = async () => {
@@ -419,81 +502,170 @@ export default function HomePage() {
         }
       }
 
-      const allGoals = await fetchAllGoals(user);
-      setGoalsByDate(goalsArrayToByDate(allGoals));
+      await Promise.all([refreshAnalyticsRange(), refreshDate(selectedDate)]);
       setStatusMessage("Imported guest data. Guest data is still preserved locally.");
     } catch (error: unknown) {
       setStatusMessage((error as Error).message);
     }
   };
 
-  const handleAddGoal = async (text: string) => {
+  const handleAddGoal = async (input: AddGoalInput) => {
+    if (loading) {
+      const message = "Signing you in...";
+      setStatusMessage(message);
+      throw new Error(message);
+    }
+
     if (!user) {
-      updateGuestState((current) => addGoal(current, selectedDate, { text }));
+      if (input.recurrenceType !== "NONE") {
+        const message = "Recurring goals require sign-in.";
+        setStatusMessage(message);
+        throw new Error(message);
+      }
+      try {
+        const next = createGuestGoalForDate(storageKey, selectedDate, { text: input.text });
+        setGoalsByDate(next);
+      } catch (error: unknown) {
+        const message = toErrorMessage(error);
+        setStatusMessage(message);
+        throw new Error(message);
+      }
       return;
     }
 
     try {
-      const created = await createGoalApi(user, selectedDate, text);
-      setGoalsByDate((current) => {
-        const existing = current[selectedDate] ?? [];
-        return { ...current, [selectedDate]: [...existing, created] };
+      if (input.recurrenceType === "NONE") {
+        const created = await createGoalApi(user, selectedDate, input.text);
+        setGoalsByDate((current) => {
+          const existing = current[selectedDate] ?? [];
+          return { ...current, [selectedDate]: [...existing, created] };
+        });
+        return;
+      }
+
+      await createSeries(user, {
+        text: input.text,
+        recurrenceType: input.recurrenceType,
+        startDate: selectedDate,
+        daysOfWeek:
+          input.recurrenceType === "WEEKLY"
+            ? input.daysOfWeek && input.daysOfWeek.length > 0
+              ? input.daysOfWeek
+              : [getWeekday(selectedDate)]
+            : undefined,
+        dayOfMonth: input.recurrenceType === "MONTHLY" ? input.dayOfMonth : undefined
       });
+      await Promise.all([refreshDate(selectedDate), refreshAnalyticsRange()]);
     } catch (error: unknown) {
-      setStatusMessage((error as Error).message);
+      const rawMessage = toErrorMessage(error);
+      if (rawMessage.includes("HTTP 500: Server auth not configured")) {
+        const message =
+          "Server authentication is not configured. Check FIREBASE_* env vars on Vercel.";
+        setStatusMessage(message);
+        throw new Error(message);
+      }
+
+      if (rawMessage.startsWith("HTTP 401")) {
+        const message = user
+          ? "Session expired. We refreshed your token once. Please sign in again."
+          : "Please sign in to save to your account.";
+        setStatusMessage(message);
+        throw new Error(message);
+      }
+
+      setStatusMessage(rawMessage);
+      throw new Error(rawMessage);
     }
   };
 
-  const handleToggleGoal = async (goalId: string) => {
-    const existing = goalsForDate.find((goal) => goal.id === goalId);
-    if (!existing) {
-      return;
-    }
-
+  const handleToggleGoal = async (goal: Goal) => {
     if (!user) {
-      updateGuestState((current) => toggleGoalCompleted(current, selectedDate, goalId));
+      updateGuestState((current) => toggleGoalCompleted(current, selectedDate, goal.id));
       return;
     }
 
     try {
-      const updated = await patchGoal(user, goalId, { completed: !existing.completed });
+      if (goal.kind === "recurring") {
+        await mutateSeriesOccurrence(user, goal.id, {
+          date: selectedDate,
+          action: goal.completed ? "uncomplete" : "complete"
+        });
+        await refreshDate(selectedDate);
+        return;
+      }
+
+      const updated = await patchGoal(user, goal.id, { completed: !goal.completed });
       setGoalsByDate((current) => ({
         ...current,
-        [selectedDate]: (current[selectedDate] ?? []).map((goal) => (goal.id === goalId ? updated : goal))
+        [selectedDate]: (current[selectedDate] ?? []).map((item) => (item.id === goal.id ? updated : item))
       }));
     } catch (error: unknown) {
       setStatusMessage((error as Error).message);
     }
   };
 
-  const handleDeleteGoal = async (goalId: string) => {
+  const handleDeleteGoal = async (goal: Goal, scope: "occurrence" | "series" = "occurrence") => {
     if (!user) {
-      updateGuestState((current) => deleteGoal(current, selectedDate, goalId));
+      updateGuestState((current) => deleteGoal(current, selectedDate, goal.id));
       return;
     }
 
     try {
-      await removeGoal(user, goalId);
+      if (goal.kind === "recurring") {
+        if (scope === "series") {
+          await deleteSeries(user, goal.id);
+          await Promise.all([refreshDate(selectedDate), refreshAnalyticsRange()]);
+          return;
+        }
+        await mutateSeriesOccurrence(user, goal.id, {
+          date: selectedDate,
+          action: "skip"
+        });
+        await refreshDate(selectedDate);
+        return;
+      }
+
+      await removeGoal(user, goal.id);
       setGoalsByDate((current) => ({
         ...current,
-        [selectedDate]: (current[selectedDate] ?? []).filter((goal) => goal.id !== goalId)
+        [selectedDate]: (current[selectedDate] ?? []).filter((item) => item.id !== goal.id)
       }));
     } catch (error: unknown) {
       setStatusMessage((error as Error).message);
     }
   };
 
-  const handleUpdateGoalText = async (goalId: string, newText: string) => {
+  const handleUpdateGoalText = async (
+    goal: Goal,
+    newText: string,
+    scope: "occurrence" | "series" = "occurrence"
+  ) => {
     if (!user) {
-      updateGuestState((current) => updateGoalText(current, selectedDate, goalId, newText));
+      updateGuestState((current) => updateGoalText(current, selectedDate, goal.id, newText));
       return;
     }
 
     try {
-      const updated = await patchGoal(user, goalId, { text: newText });
+      if (goal.kind === "recurring") {
+        if (scope === "series") {
+          await updateSeries(user, goal.id, { text: newText });
+          await Promise.all([refreshDate(selectedDate), refreshAnalyticsRange()]);
+          return;
+        }
+
+        await mutateSeriesOccurrence(user, goal.id, {
+          date: selectedDate,
+          action: "overrideText",
+          text: newText
+        });
+        await refreshDate(selectedDate);
+        return;
+      }
+
+      const updated = await patchGoal(user, goal.id, { text: newText });
       setGoalsByDate((current) => ({
         ...current,
-        [selectedDate]: (current[selectedDate] ?? []).map((goal) => (goal.id === goalId ? updated : goal))
+        [selectedDate]: (current[selectedDate] ?? []).map((item) => (item.id === goal.id ? updated : item))
       }));
     } catch (error: unknown) {
       setStatusMessage((error as Error).message);
@@ -508,11 +680,18 @@ export default function HomePage() {
 
     const completedGoals = goalsForDate.filter((goal) => goal.completed);
     try {
-      await Promise.all(completedGoals.map((goal) => removeGoal(user, goal.id)));
-      setGoalsByDate((current) => ({
-        ...current,
-        [selectedDate]: (current[selectedDate] ?? []).filter((goal) => !goal.completed)
-      }));
+      await Promise.all(
+        completedGoals.map((goal) => {
+          if (goal.kind === "recurring") {
+            return mutateSeriesOccurrence(user, goal.id, {
+              date: selectedDate,
+              action: "uncomplete"
+            });
+          }
+          return removeGoal(user, goal.id);
+        })
+      );
+      await refreshDate(selectedDate);
     } catch (error: unknown) {
       setStatusMessage((error as Error).message);
     }
@@ -553,20 +732,20 @@ export default function HomePage() {
         {activeTab === "today" ? (
           <ChecklistPanel
             selectedDate={selectedDate}
+            mode={user ? "signed-in" : "guest"}
+            authLoading={loading}
             onDateChange={setSelectedDate}
             goalsForDate={goalsForDate}
             isHydrated={isHydrated}
-            onAddGoal={(text) => {
-              void handleAddGoal(text);
+            onAddGoal={async (input) => handleAddGoal(input)}
+            onToggle={(goal) => {
+              void handleToggleGoal(goal);
             }}
-            onToggle={(goalId) => {
-              void handleToggleGoal(goalId);
+            onDelete={(goal, scope) => {
+              void handleDeleteGoal(goal, scope);
             }}
-            onDelete={(goalId) => {
-              void handleDeleteGoal(goalId);
-            }}
-            onUpdateText={(goalId, newText) => {
-              void handleUpdateGoalText(goalId, newText);
+            onUpdateText={(goal, newText, scope) => {
+              void handleUpdateGoalText(goal, newText, scope);
             }}
             onClearCompleted={() => {
               void handleClearCompleted();

@@ -1,5 +1,6 @@
 # dependencies
 /node_modules
+node_modules/
 
 # next.js
 /.next
@@ -20,9 +21,12 @@ pnpm-debug.log*
 
 # local env files
 .env*.local
+.env.local
+.env
 
 # vercel
 .vercel
+.vercel/
 
 # typescript
 *.tsbuildinfo
@@ -30,6 +34,5 @@ pnpm-debug.log*
 # test
 coverage
 
-.env
-
+*firebase-adminsdk*.json
 accountability-tracker-bd608-firebase-adminsdk-fbsvc-ca84fd4031.json

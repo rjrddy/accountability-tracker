@@ -122,20 +122,28 @@ This runs `prisma migrate deploy && next build`.
 3. Redeploy after any env change.
 4. Build runs migrations via `prisma migrate deploy` automatically.
 
-## Firebase Admin setup (API auth)
+## Firebase Admin (Server) setup on Vercel
 
-Use one of these options for server verification:
+Authenticated API routes verify Firebase ID tokens with `firebase-admin` using explicit env vars.
 
-1. `GOOGLE_APPLICATION_CREDENTIALS` path to service account JSON, or
-2. Explicit env vars in `.env.local`:
+Set these environment variables in Vercel (and locally in `.env.local` for dev):
+
+- `FIREBASE_PROJECT_ID`
+- `FIREBASE_CLIENT_EMAIL`
+- `FIREBASE_PRIVATE_KEY`
+
+Example:
 
 ```bash
-FIREBASE_ADMIN_PROJECT_ID=...
-FIREBASE_ADMIN_CLIENT_EMAIL=...
-FIREBASE_ADMIN_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_CLIENT_EMAIL=firebase-adminsdk-xxx@your-project-id.iam.gserviceaccount.com
+FIREBASE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 ```
 
-Without valid Firebase Admin credentials, authenticated API routes will return `401`.
+Important:
+- Keep newline escapes (`\n`) in `FIREBASE_PRIVATE_KEY`; the server converts them to real newlines.
+- After adding/changing these vars in Vercel, redeploy is required.
+- Use `GET /api/admin-health` to confirm env presence (returns booleans only, never secret values).
 
 ## Run (production machine)
 

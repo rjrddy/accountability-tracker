@@ -9,6 +9,8 @@ type RequestBody = {
   username?: string;
 };
 
+export const runtime = "nodejs";
+
 export async function POST(request: NextRequest) {
   try {
     const { uid, decodedToken } = await requireUid(request);
@@ -50,8 +52,16 @@ export async function POST(request: NextRequest) {
       return jsonError("Username already taken.", 409);
     }
 
-    if (error instanceof Error && error.message === "Unauthorized") {
-      return jsonError("Unauthorized", 401);
+    if (error instanceof Error && error.message === "Missing bearer token") {
+      return jsonError("Missing bearer token", 401);
+    }
+
+    if (error instanceof Error && error.message === "Invalid token") {
+      return jsonError("Invalid token", 401);
+    }
+
+    if (error instanceof Error && error.message === "Server auth not configured") {
+      return jsonError("Server auth not configured", 500);
     }
 
     return jsonError("Failed to update username.", 500);

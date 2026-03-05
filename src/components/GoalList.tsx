@@ -4,9 +4,9 @@ import GoalItem from "@/components/GoalItem";
 
 type GoalListProps = {
   goals: Goal[];
-  onToggle: (goalId: string) => void;
-  onDelete: (goalId: string) => void;
-  onUpdateText: (goalId: string, newText: string) => void;
+  onToggle: (goal: Goal) => void;
+  onDelete: (goal: Goal) => void;
+  onUpdateText: (goal: Goal, newText: string, scope?: "occurrence" | "series") => void;
 };
 
 export default function GoalList({ goals, onToggle, onDelete, onUpdateText }: GoalListProps) {
@@ -24,7 +24,7 @@ export default function GoalList({ goals, onToggle, onDelete, onUpdateText }: Go
     <ul className="mt-4 divide-y divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-white">
       {sortedGoals.map((goal) => (
         <GoalItem
-          key={goal.id}
+          key={goal.uiKey ?? goal.id}
           goal={goal}
           onToggle={onToggle}
           onDelete={onDelete}

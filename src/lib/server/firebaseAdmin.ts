@@ -3,22 +3,42 @@ import "server-only";
 import { App, cert, getApp, getApps, initializeApp } from "firebase-admin/app";
 import { Auth, getAuth } from "firebase-admin/auth";
 
-function buildServiceAccount() {
-  const projectId = process.env.FIREBASE_PROJECT_ID ?? process.env.FIREBASE_ADMIN_PROJECT_ID;
-  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL ?? process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
-  const privateKey = (process.env.FIREBASE_PRIVATE_KEY ?? process.env.FIREBASE_ADMIN_PRIVATE_KEY)?.replace(
-    /\\n/g,
-    "\n"
-  );
+const FIREBASE_ADMIN_KEYS = [
+  "FIREBASE_PROJECT_ID",
+  "FIREBASE_CLIENT_EMAIL",
+  "FIREBASE_PRIVATE_KEY"
+] as const;
 
-  if (!projectId || !clientEmail || !privateKey) {
-    return null;
+export class FirebaseAdminConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FirebaseAdminConfigError";
+  }
+}
+
+let didLogConfigError = false;
+
+function getFirebaseAdminServiceAccount() {
+  const env = {
+    FIREBASE_PROJECT_ID: process.env.FIREBASE_PROJECT_ID,
+    FIREBASE_CLIENT_EMAIL: process.env.FIREBASE_CLIENT_EMAIL,
+    FIREBASE_PRIVATE_KEY: process.env.FIREBASE_PRIVATE_KEY
+  };
+
+  const missing = FIREBASE_ADMIN_KEYS.filter((key) => !env[key]);
+  if (missing.length > 0) {
+    const message = `Missing Firebase Admin env vars: ${missing.join(", ")}`;
+    if (!didLogConfigError) {
+      console.error(message);
+      didLogConfigError = true;
+    }
+    throw new FirebaseAdminConfigError(message);
   }
 
   return {
-    projectId,
-    clientEmail,
-    privateKey
+    projectId: env.FIREBASE_PROJECT_ID as string,
+    clientEmail: env.FIREBASE_CLIENT_EMAIL as string,
+    privateKey: (env.FIREBASE_PRIVATE_KEY as string).replace(/\\n/g, "\n")
   };
 }
 
@@ -28,16 +48,9 @@ export function getFirebaseAdminApp(): App {
     return getApp();
   }
 
-  const serviceAccount = buildServiceAccount();
-  if (serviceAccount) {
-    return initializeApp({ credential: cert(serviceAccount) });
-  }
-
-  return initializeApp();
+  return initializeApp({ credential: cert(getFirebaseAdminServiceAccount()) });
 }
 
 export function getFirebaseAdminAuth(): Auth {
   return getAuth(getFirebaseAdminApp());
 }
-
-export const adminAuth = getFirebaseAdminAuth();

@@ -3,6 +3,25 @@ import { requireUid } from "@/lib/server/auth";
 import { jsonError } from "@/lib/server/api";
 import { prisma } from "@/lib/server/prisma";
 
+export const runtime = "nodejs";
+
+function handleRouteError(error: unknown) {
+  if (error instanceof Error && error.message === "Missing bearer token") {
+    return jsonError("Missing bearer token", 401);
+  }
+
+  if (error instanceof Error && error.message === "Invalid token") {
+    return jsonError("Invalid token", 401);
+  }
+
+  if (error instanceof Error && error.message === "Server auth not configured") {
+    return jsonError("Server auth not configured", 500);
+  }
+
+  console.error("Me route error", error);
+  return jsonError("Internal server error.", 500);
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { uid, decodedToken } = await requireUid(request);
@@ -35,7 +54,7 @@ export async function GET(request: NextRequest) {
       displayName: user.displayName,
       photoURL: user.photoURL
     });
-  } catch {
-    return jsonError("Unauthorized", 401);
+  } catch (error: unknown) {
+    return handleRouteError(error);
   }
 }

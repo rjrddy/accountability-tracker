@@ -8,6 +8,11 @@ export type Goal = {
   completed: boolean;
   createdAt: string;
   completedAt?: number;
+  date?: string;
+  kind?: "oneTime" | "recurring";
+  uiKey?: string;
+  recurrenceType?: "NONE" | "DAILY" | "WEEKLY" | "MONTHLY";
+  isOverride?: boolean;
 };
 
 export type GoalsByDate = Record<string, Goal[]>;
@@ -46,7 +51,18 @@ function safeParseGoals(rawValue: string): GoalsByDate {
             typeof candidate.text === "string" &&
             typeof candidate.completed === "boolean" &&
             typeof candidate.createdAt === "string" &&
-            (candidate.completedAt === undefined || typeof candidate.completedAt === "number")
+            (candidate.completedAt === undefined || typeof candidate.completedAt === "number") &&
+            (candidate.date === undefined || typeof candidate.date === "string") &&
+            (candidate.kind === undefined ||
+              candidate.kind === "oneTime" ||
+              candidate.kind === "recurring") &&
+            (candidate.uiKey === undefined || typeof candidate.uiKey === "string") &&
+            (candidate.recurrenceType === undefined ||
+              candidate.recurrenceType === "NONE" ||
+              candidate.recurrenceType === "DAILY" ||
+              candidate.recurrenceType === "WEEKLY" ||
+              candidate.recurrenceType === "MONTHLY") &&
+            (candidate.isOverride === undefined || typeof candidate.isOverride === "boolean")
           );
         })
         .map((goal) => ({
@@ -54,7 +70,12 @@ function safeParseGoals(rawValue: string): GoalsByDate {
           text: goal.text,
           completed: goal.completed,
           createdAt: goal.createdAt,
-          completedAt: goal.completedAt
+          completedAt: goal.completedAt,
+          date: goal.date,
+          kind: goal.kind,
+          uiKey: goal.uiKey,
+          recurrenceType: goal.recurrenceType,
+          isOverride: goal.isOverride
         }));
 
       result[date] = cleanedGoals;
@@ -123,6 +144,17 @@ export function addGoal(goalsByDate: GoalsByDate, dateKey: string, input: NewGoa
     ...goalsByDate,
     [dateKey]: [...existingGoals, nextGoal]
   };
+}
+
+export function createGuestGoalForDate(
+  storageKey: string,
+  dateKey: string,
+  input: NewGoalInput
+): GoalsByDate {
+  const current = loadGoalsByDate(storageKey);
+  const next = addGoal(current, dateKey, input);
+  saveGoalsByDate(next, storageKey);
+  return next;
 }
 
 export function updateGoalText(

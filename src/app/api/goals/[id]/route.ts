@@ -3,10 +3,29 @@ import { requireUid } from "@/lib/server/auth";
 import { jsonError } from "@/lib/server/api";
 import { prisma } from "@/lib/server/prisma";
 
+export const runtime = "nodejs";
+
 type UpdateGoalBody = {
   text?: string;
   completed?: boolean;
 };
+
+function handleRouteError(error: unknown) {
+  if (error instanceof Error && error.message === "Missing bearer token") {
+    return jsonError("Missing bearer token", 401);
+  }
+
+  if (error instanceof Error && error.message === "Invalid token") {
+    return jsonError("Invalid token", 401);
+  }
+
+  if (error instanceof Error && error.message === "Server auth not configured") {
+    return jsonError("Server auth not configured", 500);
+  }
+
+  console.error("Goal item route error", error);
+  return jsonError("Internal server error.", 500);
+}
 
 function toClientGoal(goal: {
   id: string;
@@ -17,10 +36,13 @@ function toClientGoal(goal: {
   completedAt: Date | null;
 }) {
   return {
+    kind: "oneTime" as const,
     id: goal.id,
+    uiKey: `oneTime:${goal.id}`,
     date: goal.date,
     text: goal.text,
     completed: goal.completed,
+    isOverride: false,
     createdAt: goal.createdAt.toISOString(),
     completedAt: goal.completedAt ? goal.completedAt.getTime() : undefined
   };
@@ -69,8 +91,8 @@ export async function PATCH(
     });
 
     return NextResponse.json(toClientGoal(updated));
-  } catch {
-    return jsonError("Unauthorized", 401);
+  } catch (error: unknown) {
+    return handleRouteError(error);
   }
 }
 
@@ -88,7 +110,7 @@ export async function DELETE(
 
     await prisma.goal.delete({ where: { id } });
     return NextResponse.json({ ok: true });
-  } catch {
-    return jsonError("Unauthorized", 401);
+  } catch (error: unknown) {
+    return handleRouteError(error);
   }
 }

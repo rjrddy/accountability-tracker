@@ -18,6 +18,9 @@ model User {
   updatedAt     DateTime  @updatedAt
   goals         Goal[]
   dayNotes      DayNote[]
+  goalSeries    GoalSeries[]
+  goalOverrides GoalOccurrenceOverride[]
+  goalCompletions GoalCompletion[]
 }
 
 model Goal {
@@ -29,7 +32,60 @@ model Goal {
   createdAt   DateTime  @default(now())
   completedAt DateTime?
   user        User      @relation(fields: [uid], references: [uid], onDelete: Cascade)
+  completions GoalCompletion[]
 
+  @@index([uid, date])
+}
+
+model GoalSeries {
+  id             String                   @id @default(cuid())
+  uid            String
+  text           String
+  recurrenceType RecurrenceType
+  interval       Int                      @default(1)
+  daysOfWeek     Int[]                    @default([])
+  dayOfMonth     Int?
+  startDate      String
+  endDate        String?
+  createdAt      DateTime                 @default(now())
+  updatedAt      DateTime                 @updatedAt
+  user           User                     @relation(fields: [uid], references: [uid], onDelete: Cascade)
+  overrides      GoalOccurrenceOverride[]
+  completions    GoalCompletion[]
+
+  @@index([uid, startDate])
+  @@index([uid, recurrenceType])
+}
+
+model GoalOccurrenceOverride {
+  id           String     @id @default(cuid())
+  seriesId     String
+  uid          String
+  date         String
+  overrideText String?
+  isSkipped    Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  series       GoalSeries @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  user         User       @relation(fields: [uid], references: [uid], onDelete: Cascade)
+
+  @@unique([seriesId, date])
+  @@index([uid, date])
+}
+
+model GoalCompletion {
+  id          String     @id @default(cuid())
+  uid         String
+  seriesId    String?
+  goalId      String?
+  date        String
+  completed   Boolean    @default(false)
+  completedAt DateTime?
+  series      GoalSeries? @relation(fields: [seriesId], references: [id], onDelete: Cascade)
+  goal        Goal?      @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  user        User       @relation(fields: [uid], references: [uid], onDelete: Cascade)
+
+  @@unique([uid, date, seriesId])
   @@index([uid, date])
 }
 
@@ -43,4 +99,11 @@ model DayNote {
 
   @@unique([uid, date])
   @@index([uid, date])
+}
+
+enum RecurrenceType {
+  NONE
+  DAILY
+  WEEKLY
+  MONTHLY
 }

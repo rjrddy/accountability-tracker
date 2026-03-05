@@ -7,6 +7,25 @@ type PutDayBody = {
   notes?: string;
 };
 
+export const runtime = "nodejs";
+
+function handleRouteError(error: unknown) {
+  if (error instanceof Error && error.message === "Missing bearer token") {
+    return jsonError("Missing bearer token", 401);
+  }
+
+  if (error instanceof Error && error.message === "Invalid token") {
+    return jsonError("Invalid token", 401);
+  }
+
+  if (error instanceof Error && error.message === "Server auth not configured") {
+    return jsonError("Server auth not configured", 500);
+  }
+
+  console.error("Day route error", error);
+  return jsonError("Internal server error.", 500);
+}
+
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ date: string }> }
@@ -28,8 +47,8 @@ export async function GET(
       notes: note?.notes ?? "",
       updatedAt: note?.updatedAt ?? null
     });
-  } catch {
-    return jsonError("Unauthorized", 401);
+  } catch (error: unknown) {
+    return handleRouteError(error);
   }
 }
 
@@ -59,7 +78,7 @@ export async function PUT(
       notes: saved.notes,
       updatedAt: saved.updatedAt
     });
-  } catch {
-    return jsonError("Unauthorized", 401);
+  } catch (error: unknown) {
+    return handleRouteError(error);
   }
 }
